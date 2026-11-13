@@ -36,6 +36,7 @@ Aplicativo híbrido da disciplina **Laboratório de Desenvolvimento de Aplicativ
 - [Evolução do projeto](#evolução-do-projeto)
 - [P1 — Hospedagem e banco de dados](#p1--hospedagem-do-projeto-e-banco-de-dados-em-nuvem)
 - [P2 — Acessibilidade, autenticação, notificações e chat](#p2--aula-12-chat-em-tempo-real-entre-usuários)
+- [P2 — Aula 13: Autenticação e Autorização](#p2--aula-13-autenticação-e-autorização)
 - [Integrantes](#integrantes)
 
 ---
@@ -1453,7 +1454,7 @@ Essas evidências documentam a troca de mensagens nos dois sentidos entre as int
 
 ## Status
 
-**P1 concluída. P2 — Aulas 8, 9,Guia da Aula 9, 10, 11 e 12 documentadas, com testes na web e validações específicas no Android conforme as seções de cada aula.**
+**P1 concluída. P2 — Aulas 8, 9, Guia da Aula 9, 10, 11, 12 e 13 documentadas, com testes funcionais na web e no Android, além de seis testes automatizados de segurança aprovados na Aula 13. As evidências e a matriz de permissões estão organizadas no repositório.**
 
 O Menor Preço Saqua possui uma versão web publicada, integrada a uma API REST própria e ao MongoDB Atlas para persistência dos produtos em nuvem.
 
@@ -1494,3 +1495,114 @@ P2 — Aula 10: Integração da autenticação biométrica ao login remoto, cont
 P2 — Aula 11: Notificações locais e push, preferência de som, registro de tokens e integração com o backend.
 
 P2 — Aula 12: Chat em tempo real, histórico persistido no Supabase, participação por sala e proteção de acesso com RLS.
+
+P2 — Aula 13: Validação da autenticação e autorização com Supabase Auth, controle de sessões, proteção de rotas, verificação de políticas RLS, isolamento de perfis, bloqueio de acessos indevidos às mensagens e execução de seis testes automatizados de segurança, com matriz de permissões e evidências documentadas.
+
+---
+
+## P2 — Aula 13: Autenticação e Autorização
+
+### Objetivo
+
+Validar os mecanismos de autenticação e autorização do aplicativo Menor Preço Saqua, garantindo que usuários autenticados tenham acesso somente aos recursos permitidos.
+
+A atividade utiliza Supabase Authentication, PostgreSQL e políticas de segurança Row Level Security (RLS).
+
+### Funcionalidades e mecanismos de segurança
+
+- Autenticação de usuários por e-mail e senha com Supabase Auth.
+- Gerenciamento de sessões por meio do `SessionProvider`.
+- Proteção das rotas autenticadas utilizando Expo Router.
+- Restrição de leitura e atualização de perfis.
+- Bloqueio da alteração indevida do campo `role`.
+- Controle de acesso às salas e mensagens por participação.
+- Verificação da identidade do autor durante o envio de mensagens.
+- Bloqueio de consultas protegidas após o encerramento da sessão da aplicação.
+
+### Matriz de permissões
+
+A matriz completa está disponível em [MATRIZ_PERMISSOES.md](docs/seguranca/MATRIZ_PERMISSOES.md).
+
+Foram avaliados oito cenários de autorização, executados por meio de seis scripts automatizados.
+
+| Cenário | Resultado |
+|---|---|
+| Usuário A consulta o próprio perfil | Aprovado — 1 registro |
+| Usuário A tenta consultar o perfil B | Aprovado — acesso bloqueado |
+| Usuário A tenta consultar o perfil C | Aprovado — acesso bloqueado |
+| Usuário A tenta alterar o próprio `role` | Aprovado — erro 42501 |
+| Usuário A tenta enviar mensagem com autoria de B | Aprovado — erro 42501 |
+| Usuário C tenta ler mensagens da sala A/B | Aprovado — 0 registros |
+| Usuário C tenta enviar mensagem à sala A/B | Aprovado — erro 42501 |
+| Usuário A tenta consultar seu perfil após `end_session()` | Aprovado — 0 registros |
+
+### Scripts de teste
+
+Os seis scripts estão disponíveis em `tests/seguranca/`:
+
+- `teste-isolamento-perfis.cjs`
+- `teste-role.cjs`
+- `teste-autorizacao-mensagens.cjs`
+- `teste-leitura-mensagens.cjs`
+- `teste-envio-mensagens.cjs`
+- `teste-sessao-encerrada.cjs`
+
+Todos apresentaram os resultados esperados nos cenários executados.
+
+### Verificação das políticas RLS
+
+A tabela `rooms` possui RLS ativado e uma política de leitura para usuários autenticados, condicionada à função `is_room_member(id)`.
+
+A função verifica a existência de uma sessão ativa da aplicação e a participação do usuário na sala, utilizando `auth.uid()`.
+
+Na tabela `messages`, as políticas verificadas restringem a leitura aos participantes e exigem que o autor informado corresponda ao usuário autenticado.
+
+### Evidências dos testes
+
+As capturas de tela estão organizadas em `docs/seguranca/evidencias/`.
+
+**1. Bloqueio de falsificação de autoria**
+
+![Bloqueio de autoria](docs/seguranca/evidencias/01-bloqueio-falsificacao-autoria.png)
+
+**2. Bloqueio de envio por usuário externo**
+
+![Bloqueio de envio](docs/seguranca/evidencias/02-bloqueio-envio-usuario-externo.png)
+
+**3. Bloqueio de leitura por usuário externo**
+
+![Bloqueio de leitura](docs/seguranca/evidencias/03-bloqueio-leitura-usuario-externo.png)
+
+**4. Bloqueio de alteração do papel do usuário**
+
+![Bloqueio de role](docs/seguranca/evidencias/04-bloqueio-alteracao-role.png)
+
+**5. Isolamento entre perfis**
+
+![Isolamento de perfis](docs/seguranca/evidencias/05-isolamento-perfis.png)
+
+**6. Bloqueio após encerramento da sessão**
+
+![Sessão encerrada](docs/seguranca/evidencias/06-bloqueio-sessao-encerrada.png)
+
+### Validação técnica
+
+A verificação de TypeScript foi executada com o comando:
+
+`npx tsc --noEmit`
+
+**Resultado:** nenhuma mensagem de erro.
+
+### Limitações e observações
+
+- Os testes comprovam os resultados dos cenários avaliados, não uma auditoria completa de segurança.
+- O encerramento da sessão da aplicação bloqueou a leitura do perfil no teste, mesmo com o JWT ainda disponível localmente.
+- As políticas RLS devem permanecer ativas para proteger os dados independentemente das verificações realizadas na interface.
+- A validação dos seis scripts não substitui testes funcionais completos da interface em todas as plataformas.
+- Não foram realizados testes equivalentes em dispositivos iOS.
+
+### Resultado da Aula 13
+
+Os seis scripts de segurança foram executados e aprovados. Os resultados demonstraram o isolamento de perfis, a proteção contra alterações indevidas de permissões, a restrição de acesso às mensagens e o bloqueio de leitura após o encerramento da sessão da aplicação.
+
+A documentação e as evidências foram organizadas para integrar a entrega da Aula 13.
